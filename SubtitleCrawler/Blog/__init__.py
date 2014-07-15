@@ -103,7 +103,7 @@ class Blog:
 
 class BlogAbstract(metaclass=abstractmeta):
 	EXTENSIONS = [
-		"smi", "srt", "ass", "sub", "sup",
+		"smi", "srt", "ass", "sub", "idx", "sup",
 		"zip", "rar", "7z", "ace", "alz", "egg",
 		"lha", "lzh",
 		"tar", "gz", "tgz", "bz", "bz2", "tbz", "tbz2",
