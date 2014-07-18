@@ -6,6 +6,7 @@ import json
 import requests as rq
 from bs4 import BeautifulSoup as bs
 from urllib.parse import urlparse, urlunparse, parse_qs as qsparse, urlencode, quote, unquote, quote_from_bytes, unquote_to_bytes#, ParseResult
+from collections import Counter
 
 import inspect
 import pprint
@@ -17,7 +18,7 @@ FIRST_DATE = "20140701000000"
 LAST_DATE = "20141231235959"
 
 def get_weekday():
-	for i in range(0, 8):
+	for i in range(0, 1):
 		url = BASE_URL1.format(i)
 		rs = rq.get(url)
 		if rs.ok:
@@ -43,6 +44,7 @@ def get_fastest(datas):
 	return episode, fastest, url
 
 def naver_prepare(url):
+	#print(url)
 	if not url.startswith("http://"): url = "http://{}".format(url)
 	rs = rq.get(url)
 	dom = bs(rs.content) if rs.ok else None
@@ -53,6 +55,7 @@ def naver_prepare(url):
 		return url
 
 def naver(url):
+	if not url.startswith("http://"): url = "http://{}".format(url)
 	rs = rq.get(url)
 	dom = bs(rs.content) if rs.ok else None
 	if dom:
@@ -84,16 +87,35 @@ def egloos(url):
 	rs = rq.get(url)
 	dom = bs(rs.content) if rs.ok else None
 	if dom:
-		#anchors = dom.find_all("a", href=True)
-		#for a in anchors:
-			#print(a["href"])
 		p = urlparse(url)
 		anchors = dom.find_all("a", href=re.compile(r"^/category/.*"))
-		for anchor in anchors:
-			path = urlparse(anchor["href"]).path
+		hrefs = [ href for href, count in Counter([ anchor["href"] for anchor in anchors ]).most_common(3) ]
+		#for anchor in anchors:
+		for href in hrefs:
+			#path = urlparse(anchor["href"]).path
+			path = urlparse(href).path
 			url = urlunparse([ p.scheme, p.netloc, path, p.params, p.query, p.fragment ])
 			yield url
 
+def tistory(url):
+	if not url.startswith("http://"): url = "http://{}".format(url)
+	rs = rq.get(url)
+	dom = bs(rs.content) if rs.ok else None
+	if dom:
+		p = urlparse(url)
+		anchors = dom.find_all("a", href=re.compile(r"^/category/.*"))
+		hrefs = [ href for href, count in Counter([ anchor["href"] for anchor in anchors ]).most_common(3) ]
+		for href in hrefs:
+			path = urlparse(href).path
+			url = urlunparse([ p.scheme, p.netloc, path, p.params, p.query, p.fragment ])
+			yield url
+
+# TODO: http://*/xe
+def xe(url):
+	pass
+
+# TODO: consider presented url is not posting url, just default blog url
+# just find all anchor tags for candidate
 def main(argc, args):
 	sc = []
 	for data in get_weekday():
@@ -101,7 +123,9 @@ def main(argc, args):
 		if not datas: continue
 		title, url = data["s"], get_fastest(datas)[2]
 		try: print(title, url)
-		except: print(title.encode(), url)
+		except: print(title.encode(), url, type(url))
+
+		if not url: continue
 
 		result = None
 		if re.match(r"^blog\.naver\.com/.*", url):
@@ -111,15 +135,24 @@ def main(argc, args):
 				result = []
 				for x in naver(url): result.append(dict(NAME=title, NAVER=x))
 			else: print("Error: {}".format(title))
+		elif re.match(r"^[^.]+\.blog.me/.*", url):
+			url = naver_check(url)
+			if url:
+				result = []
+				for x in naver(url): result.append(dict(NAME=title, NAVER=x))
 		elif re.match(r"^[^.]+\.egloos.com/.*", url):
 			result = []
 			for x in egloos(url): result.append(dict(NAME=title, EGLOOS=x))
+		elif re.match(r"^[^.]+\.tistory.com/.*", url):
+			result = []
+			for x in tistory(url): result.append(dict(NAME=title, TISTORY=x))
 		else:
 			#if naver_check(url): result = dict(NAME=title, NAVER=naver(naver_check(url)))
 			url_checked = naver_check(url)
 			if url_checked:
 				result = []
 				for x in naver(url_checked): result.append(dict(NAME=title, NAVER=x))
+			url_checked = xe_check
 		if result:
 			if type(result) == list: sc += result
 			else: sc.append(result)
