@@ -6,7 +6,7 @@ import re
 import json
 import requests as rq
 from bs4 import BeautifulSoup as bs
-from urllib.parse import urlparse, urlunparse, parse_qs as qsparse, urlencode, quote, unquote, quote_from_bytes, unquote_to_bytes#, ParseResult
+from urllib.parse import urlparse, urlunparse, parse_qs as qsparse, urlencode, quote, unquote, quote_from_bytes, unquote_to_bytes
 from collections import Counter
 
 import inspect
@@ -107,7 +107,7 @@ def egloos(url):
 		for href in hrefs:
 			path = urlparse(href).path
 			url = urlunparse([ p.scheme, p.netloc, path, p.params, p.query, p.fragment ])
-			yield url
+			yield unquote(url)
 
 def tistory(url):
 	if not url.startswith("http://"): url = "http://{}".format(url)
@@ -120,7 +120,7 @@ def tistory(url):
 		for href in hrefs:
 			path = urlparse(href).path
 			url = urlunparse([ p.scheme, p.netloc, path, p.params, p.query, p.fragment ])
-			yield url
+			yield unquote(url)
 
 # TODO: http://*/xe
 def xe(url):
