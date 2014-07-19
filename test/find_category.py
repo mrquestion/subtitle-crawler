@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os, sys
+import time, datetime
 import re
 import json
 import requests as rq
@@ -16,9 +17,11 @@ BASE_URL1 = "http://www.anissia.net/anitime/list?w={}"
 BASE_URL2 = "http://www.anissia.net/anitime/cap?i={}"
 FIRST_DATE = "20140701000000"
 LAST_DATE = "20141231235959"
+WEEKDAY = { 0: "[일]", 1: "[월]", 2: "[화]", 3: "[수]", 4: "[목]", 5: "[금]", 6: "[토]" }
 
-def get_weekday():
-	for i in range(0, 1):
+def get_weekday(min=0, max=7):
+	for i in range(min, max):
+		yield { "WEEKDAY": WEEKDAY[i] }
 		url = BASE_URL1.format(i)
 		rs = rq.get(url)
 		if rs.ok:
@@ -44,7 +47,8 @@ def get_fastest(datas):
 	return episode, fastest, url
 
 def naver_prepare(url):
-	#print(url)
+	m = re.match(r"(?P<fixed>.*blog\.naver\.com/[^/]+/[0-9]+).*", url)
+	url = m.groupdict()["fixed"] if m else url
 	if not url.startswith("http://"): url = "http://{}".format(url)
 	rs = rq.get(url)
 	dom = bs(rs.content) if rs.ok else None
@@ -61,18 +65,28 @@ def naver(url):
 	if dom:
 		p = urlparse(url)
 		title_1 = dom.find("div", id="title_1")
-		cate = title_1.find("span", class_=[ "cate", "pcol2" ])
-		pcol2s = cate.find_all("a", class_="pcol2", href=True)
-		for pcol2 in pcol2s:
-			path = urlparse(pcol2["href"]).path
-			qs = qsparse(urlparse(pcol2["href"]).query)
-			if "blogId" in qs and "categoryNo" in qs:
-				queries = []
-				for key in [ "blogId", "categoryNo" ]:
-					queries += [ '='.join([ key, value ]) for value in qs[key] ]
-				qs = '&'.join(queries)
-				url = urlunparse([ p.scheme, p.netloc, path, p.params, qs, p.fragment ])
-				yield url
+		if title_1:
+			cate = title_1.find("span", class_=[ "cate", "pcol2" ])
+			pcol2s = cate.find_all("a", class_="pcol2", href=True)
+			for pcol2 in pcol2s:
+				path = urlparse(pcol2["href"]).path
+				qs = qsparse(urlparse(pcol2["href"]).query)
+				if "blogId" in qs and "categoryNo" in qs:
+					queries = []
+					for key in [ "blogId", "categoryNo" ]:
+						queries += [ '='.join([ key, value ]) for value in qs[key] ]
+					qs = '&'.join(queries)
+					url = urlunparse([ p.scheme, p.netloc, path, p.params, qs, p.fragment ])
+
+					rs = rq.get(url)
+					dom = bs(rs.content) if rs.ok else None
+					category_name = dom.find("div", id="category-name")
+					if category_name:
+						postlisttitle = category_name.find("div", class_="postlisttitle")
+						toplistSpanBlind = postlisttitle.find("span", id="toplistSpanBlind")
+						title = toplistSpanBlind.previousSibling.strip()
+
+						yield url, title
 
 def naver_check(url):
 	if not url.startswith("http://"): url = "http://{}".format(url)
@@ -90,9 +104,7 @@ def egloos(url):
 		p = urlparse(url)
 		anchors = dom.find_all("a", href=re.compile(r"^/category/.*"))
 		hrefs = [ href for href, count in Counter([ anchor["href"] for anchor in anchors ]).most_common(3) ]
-		#for anchor in anchors:
 		for href in hrefs:
-			#path = urlparse(anchor["href"]).path
 			path = urlparse(href).path
 			url = urlunparse([ p.scheme, p.netloc, path, p.params, p.query, p.fragment ])
 			yield url
@@ -114,53 +126,68 @@ def tistory(url):
 def xe(url):
 	pass
 
+def timestamp(format="%Y%m%d-%H%M%S"):
+	return datetime.datetime.fromtimestamp(time.time()).strftime(format)
+
+def save(titles, categories, filename="{}.json".format(timestamp()), encoding="utf-8"):
+	content = [ '[', os.linesep, os.linesep ]
+	first = True
+	for category in categories:
+		if first: first = False
+		else:
+			content.append(',')
+			content.append(os.linesep)
+		line = ", ".join('"{}": "{}"'.format(key, value) for key, value in category.items())
+		content.append("{{ {} }}".format(line))
+	content.extend([ os.linesep, os.linesep, ']' ])
+	with open(filename, "wb") as wbo:
+		wbo.write(''.join(content).encode())
+
 # TODO: consider presented url is not posting url, just default blog url
 # just find all anchor tags for candidate
 def main(argc, args):
 	sc = []
-	for data in get_weekday():
-		datas = [ data for data in get_subtitle(data) ]
-		if not datas: continue
-		title, url = data["s"], get_fastest(datas)[2]
-		try: print(title, url)
-		except: print(title.encode(), url, type(url))
-
-		if not url: continue
-
-		result = None
-		if re.match(r"^blog\.naver\.com/.*", url):
-			if not re.match(r"^blog\.naver\.com/PostView.nhn.*", url): url = naver_prepare(url)
-			#if url: result = dict(NAME=title, NAVER=naver(url))
-			if url:
-				result = []
-				for x in naver(url): result.append(dict(NAME=title, NAVER=x))
-			else: print("Error: {}".format(title))
-		elif re.match(r"^[^.]+\.blog.me/.*", url):
-			url = naver_check(url)
-			if url:
-				result = []
-				for x in naver(url): result.append(dict(NAME=title, NAVER=x))
-		elif re.match(r"^[^.]+\.egloos.com/.*", url):
-			result = []
-			for x in egloos(url): result.append(dict(NAME=title, EGLOOS=x))
-		elif re.match(r"^[^.]+\.tistory.com/.*", url):
-			result = []
-			for x in tistory(url): result.append(dict(NAME=title, TISTORY=x))
+	for data in get_weekday(max=7):
+		if "WEEKDAY" in data: print(data["WEEKDAY"])
 		else:
-			#if naver_check(url): result = dict(NAME=title, NAVER=naver(naver_check(url)))
-			url_checked = naver_check(url)
-			if url_checked:
-				result = []
-				for x in naver(url_checked): result.append(dict(NAME=title, NAVER=x))
-			url_checked = xe_check
-		if result:
-			if type(result) == list: sc += result
-			else: sc.append(result)
-		else:
-			pass
-			print(url, "not support")
-			break
-	pp(sc)
+			datas = [ data for data in get_subtitle(data) ]
+			if not datas: continue
+
+			title, (episode, fastest, url) = data["s"], get_fastest(datas)
+			try: print("- {} ({}) E{} / {}".format(title, url, episode, fastest))
+			except: print("- {} ({}) E{} / {}".format(title.encode(), url, episode, fastest))
+			if not url: continue
+
+			result = None
+			if re.match(r"^blog\.naver\.com/.*", url):
+				if not re.match(r"^blog\.naver\.com/PostView\.nhn.*", url): url = naver_prepare(url)
+				if url: result = [ dict(NAME=title, NAVER=x, TEST=y) for x, y in naver(url) ]
+				else: raise ValueError(title)
+			elif re.match(r"^[^.]+\.blog\.me/.*", url):
+				url = naver_check(url)
+				if url: result = [ dict(NAME=title, NAVER=x, TEST=y) for x, y in naver(url) ]
+				else: raise ValueError(title)
+			elif re.match(r"^[^.]+\.egloos.com/.*", url):
+				result = [ dict(NAME=title, EGLOOS=x) for x in egloos(url) ]
+			elif re.match(r"^[^.]+\.tistory.com/.*", url):
+				result = [ dict(NAME=title, TISTORY=x) for x in tistory(url) ]
+			elif re.match(r"^[^/]+/xe/.*", url):
+				pass
+			else:
+				checked = naver_check(url)
+				if checked: result = [ dict(NAME=title, NAVER=x, TEST=y) for x, y in naver(checked) ]
+
+			if result:
+				sc.extend(result)
+				print("  > {} candidate{}.".format(len(result), 's' if len(result) > 1 else ''))
+				for i in range(0, len(result)):
+					try: print("    => {}. {}".format(i+1, result[i]))
+					except: print("    => {}. {}".format(i+1, str(result[i]).encode()))
+			else:
+				sc.append(dict(NAME=title, NOT_SUPPORTED=url))
+				print("  > Error: not supported url.")
+	save(None, sc)
+	#pp(sc)
 	#print(json.dumps(json.loads(str(sc).replace("'", '"')), indent=4))
 
 if __name__ == "__main__":
