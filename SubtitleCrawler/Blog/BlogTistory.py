@@ -10,7 +10,7 @@ class BlogTistory(BlogAbstract):
 	POST_URL1 = "http://{}.tistory.com/{}"
 	POST_URL2 = "http://{}/{}"
 	USER_REGEX = regex.compile(r"([^.]+)\.tistory\.com")
-	CATEGORY_REGEX = regex.compile(r"/(category|tag)/(.*)")
+	CATEGORY_REGEX = regex.compile(r"/(category|tag)/(.+)")
 	POST_REGEX1 = regex.compile(r"(http://[^/]*|)/(entry/.+|[0-9]+)$")
 	POST_REGEX2 = regex.compile(r".*{}/(entry/.+|[0-9]+)$")
 	RECENT_REGEX = regex.compile(r"commentCountOnRecentEntries[0-9]+")
@@ -34,6 +34,7 @@ class BlogTistory(BlogAbstract):
 				response = requests.get(url)
 				if response.ok or response.status_code == 404:
 					content = response.content
+					content = content[content.index(b"<html"):] if content.index(b"<html") != 0 else content
 					dom = bs(content)
 
 					s = self.NOT_FOUND_POST
@@ -97,19 +98,22 @@ class BlogTistory(BlogAbstract):
 				response = requests.get(url)
 				if response.ok or response.status_code == 404:
 					content = response.content
+					content = content[content.index(b"<html"):] if content.index(b"<html") != 0 else content
 					dom = bs(content)
+					# TODO: replace lxml
+					root = lxml.etree.HTML(content)
 
 					s = self.NOT_FOUND_CATEGORY
-					screen_out = dom.find("h2", class_="screen_out")
+					screen_out = dom.find("h2", class_="screen_out")# if len(dom) > 0 else root.xpath('//h2[@class="screen_out"]')[0] if root.xpath('//h2[@class="screen_out"]') else None
 					if screen_out and any([ x in content for x in [ s.encode("utf-8"), s.encode("euc-kr") ]]):
 						l.og("Error: Category not exists.")
 						l.og("\t{}".format(unquote(url)))
 					else:
-						anchors = dom.find_all("a", attrs={ "href": True })
+						anchors = dom.find_all("a", attrs={ "href": True })# if len(dom) > 0 else root.xpath('//a[@href]')
 						# TODO: find_all regex
 						indexes = []
 						for anchor in anchors:
-							href = anchor["href"]
+							href = anchor["href"]# if len(dom) > 0 else anchor.xpath('./@href')[0]
 						
 							recent = True
 							index = None

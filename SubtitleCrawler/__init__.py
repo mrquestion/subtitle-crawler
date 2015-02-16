@@ -96,5 +96,5 @@ class SubtitleCrawler:
 
 					return True
 		else:
-			print("Error: requests.get()")
-			print("\t{}".format(file))
+			l.og("Error: requests.get()")
+			l.og("\t{}".format(file))

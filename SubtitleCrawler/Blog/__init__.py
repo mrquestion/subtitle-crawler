@@ -4,6 +4,8 @@ import json
 import re as regex
 import requests
 from bs4 import BeautifulSoup as bs
+import lxml
+from lxml import etree
 from urllib.parse import urlparse, parse_qs, urlencode, quote, unquote, quote_from_bytes, unquote_to_bytes
 from abc import ABCMeta as abstractmeta, abstractmethod
 
@@ -53,7 +55,7 @@ class Blog:
 
 		if not found:
 			l.og("Error: Not supported {} URL".format(", ".join("'{}'".format(blog.KEY) for blog in self.list)))
-			l.og("\t{}".format(unquote(url)))
+			l.og("\t{}".format(unquote(str(url))))
 			'''
 		if type(url) is str:
 			for blog in self.list:
